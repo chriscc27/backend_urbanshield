@@ -1,0 +1,37 @@
+const createReportEntity = ({
+  reportId,
+  userId,
+  title,
+  category,
+  description,
+  latitude,
+  longitude,
+  location = null,
+  imageUrl = null,
+  imageKeys = [],
+  status,
+  priority,
+  createdAt,
+  updatedAt,
+  resolvedAt = null,
+}) => ({
+  reportId,
+  userId,
+  title,
+  category,
+  description,
+  latitude,
+  longitude,
+  location,
+  imageUrl,
+  imageKeys,
+  status,
+  priority,
+  createdAt,
+  updatedAt,
+  resolvedAt,
+});
+
+module.exports = {
+  createReportEntity,
+};

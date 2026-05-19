@@ -1,0 +1,194 @@
+const userRepository = require('../repositories/user.repository');
+const { createUserEntity, toPublicUser } = require('../models/user.model');
+const { hashPassword, comparePassword } = require('../utils/password');
+const {
+  signAccessToken,
+  signRefreshToken,
+  verifyRefreshToken,
+  signPasswordResetToken,
+  verifyPasswordResetToken,
+} = require('../utils/jwt');
+const { generateUserId } = require('../helpers/idHelper');
+const { nowISO } = require('../helpers/dateHelper');
+const { ROLES } = require('../constants/roles');
+const { ConflictError, UnauthorizedError, NotFoundError, BadRequestError } = require('../errors/AppError');
+const { env } = require('../config/env');
+const cognitoService = require('../aws/cognito.service');
+const activityLogRepository = require('../repositories/activityLog.repository');
+const { createActivityLogEntity } = require('../models/activityLog.model');
+const { generateActivityId } = require('../helpers/idHelper');
+
+class AuthService {
+  async register({ email, password, name, role = ROLES.CITIZEN, phone }) {
+    if (env.cognito.useCognito && env.cognito.userPoolId) {
+      await cognitoService.signUp({ email, password, name, role });
+    }
+
+    const existing = await userRepository.findByEmail(email);
+    if (existing) {
+      throw new ConflictError('User with this email already exists');
+    }
+
+    const allUsers = await userRepository.findAll();
+    const assignedRole =
+      allUsers.length === 0 ? ROLES.ADMIN : role === ROLES.ADMIN ? ROLES.CITIZEN : role;
+
+    const userId = generateUserId();
+    const hashedPassword = await hashPassword(password);
+    const timestamp = nowISO();
+
+    const user = createUserEntity({
+      userId,
+      email,
+      password: hashedPassword,
+      name,
+      role: assignedRole,
+      phone,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    await userRepository.create(user);
+    await this._logActivity('user', userId, 'USER_REGISTERED', userId);
+
+    const tokens = this._generateTokens(user);
+    return { user: toPublicUser(user), tokens };
+  }
+
+  async login({ email, password }) {
+    const user = await userRepository.findByEmail(email);
+    if (!user || !user.isActive) {
+      throw new UnauthorizedError('Invalid credentials');
+    }
+
+    const isValid = await comparePassword(password, user.password);
+    if (!isValid) {
+      throw new UnauthorizedError('Invalid credentials');
+    }
+
+    const tokens = this._generateTokens(user);
+    await this._storeRefreshToken(user.userId, tokens.refreshToken);
+
+    return { user: toPublicUser(user), tokens };
+  }
+
+  async refreshToken(refreshToken) {
+    const decoded = verifyRefreshToken(refreshToken);
+    const stored = await this._getRefreshToken(decoded.userId);
+    if (!stored || stored !== refreshToken) {
+      throw new UnauthorizedError('Invalid refresh token');
+    }
+
+    const user = await userRepository.findById(decoded.userId);
+    if (!user || !user.isActive) {
+      throw new UnauthorizedError('User not found or inactive');
+    }
+
+    const tokens = this._generateTokens(user);
+    await this._storeRefreshToken(user.userId, tokens.refreshToken);
+    return { user: toPublicUser(user), tokens };
+  }
+
+  async logout(userId, refreshToken) {
+    await this._removeRefreshToken(userId, refreshToken);
+    await this._logActivity('user', userId, 'USER_LOGOUT', userId);
+    return { loggedOut: true };
+  }
+
+  async forgotPassword(email) {
+    const user = await userRepository.findByEmail(email);
+    if (!user) {
+      return { message: 'If the email exists, a reset link will be sent' };
+    }
+
+    if (env.cognito.useCognito) {
+      await cognitoService.forgotPassword(email);
+      return { message: 'Password reset initiated via Cognito' };
+    }
+
+    const resetToken = signPasswordResetToken({ userId: user.userId, email: user.email });
+    await this._storePasswordResetToken(user.userId, resetToken);
+
+    const resetUrl = `${env.passwordReset.frontendUrl}/reset-password?token=${resetToken}`;
+    return {
+      message: 'If the email exists, a reset link will be sent',
+      ...(env.isDevelopment && { resetUrl, resetToken }),
+    };
+  }
+
+  async resetPassword({ token, newPassword }) {
+    const decoded = verifyPasswordResetToken(token);
+    const stored = await this._getPasswordResetToken(decoded.userId);
+    if (!stored || stored !== token) {
+      throw new BadRequestError('Invalid or expired reset token');
+    }
+
+    const user = await userRepository.findById(decoded.userId);
+    if (!user) throw new NotFoundError('User not found');
+
+    const hashedPassword = await hashPassword(newPassword);
+    await userRepository.update(user.userId, { password: hashedPassword });
+    await this._removePasswordResetToken(user.userId);
+
+    return { message: 'Password reset successfully' };
+  }
+
+  async getProfile(userId) {
+    const user = await userRepository.findById(userId);
+    if (!user) throw new NotFoundError('User not found');
+    return toPublicUser(user);
+  }
+
+  _generateTokens(user) {
+    const payload = { userId: user.userId, email: user.email, role: user.role };
+    return {
+      accessToken: signAccessToken(payload),
+      refreshToken: signRefreshToken(payload),
+      tokenType: 'Bearer',
+      expiresIn: env.jwt.accessExpiresIn,
+    };
+  }
+
+  async _storeRefreshToken(userId, token) {
+    await userRepository.update(userId, { refreshToken: token });
+  }
+
+  async _getRefreshToken(userId) {
+    const user = await userRepository.findById(userId);
+    if (user?.refreshToken) return user.refreshToken;
+    return null;
+  }
+
+  async _removeRefreshToken(userId) {
+    await userRepository.update(userId, { refreshToken: null });
+  }
+
+  async _storePasswordResetToken(userId, token) {
+    await userRepository.update(userId, { passwordResetToken: token });
+  }
+
+  async _getPasswordResetToken(userId) {
+    const user = await userRepository.findById(userId);
+    if (user?.passwordResetToken) return user.passwordResetToken;
+    return null;
+  }
+
+  async _removePasswordResetToken(userId) {
+    await userRepository.update(userId, { passwordResetToken: null });
+  }
+
+  async _logActivity(entityType, entityId, action, performedBy) {
+    await activityLogRepository.create(
+      createActivityLogEntity({
+        activityId: generateActivityId(),
+        entityType,
+        entityId,
+        action,
+        performedBy,
+        createdAt: nowISO(),
+      }),
+    );
+  }
+}
+
+module.exports = new AuthService();
