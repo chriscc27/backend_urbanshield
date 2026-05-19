@@ -1,6 +1,7 @@
 const reportRepository = require('../repositories/report.repository');
 const notificationRepository = require('../repositories/notification.repository');
 const activityLogRepository = require('../repositories/activityLog.repository');
+const userRepository = require('../repositories/user.repository');
 const { createReportEntity } = require('../models/report.model');
 const { createNotificationEntity } = require('../models/notification.model');
 const { createActivityLogEntity } = require('../models/activityLog.model');
@@ -20,6 +21,13 @@ class ReportService {
     const reportId = generateReportId();
     const timestamp = nowISO();
     const priority = data.priority || CATEGORY_DEFAULT_PRIORITY[data.category] || REPORT_PRIORITY.MEDIUM;
+
+    // Verificar TrustScore del usuario para decidir si publicar
+    const user = await userRepository.findById(userId);
+    const score = user?.trustScore ?? 50;
+    
+    // Si su score es muy bajo, lo mandamos a quarantine (usando cancelled como sustituto o dejando pendiente sin notificar)
+    const status = score < 20 ? REPORT_STATUS.CANCELLED : REPORT_STATUS.PENDING;
 
     const report = createReportEntity({
       reportId,
@@ -41,14 +49,16 @@ class ReportService {
     await reportRepository.create(report);
     await this._logActivity('report', reportId, 'REPORT_CREATED', userId, { category: report.category });
 
-    await notificationService.notifyReportCreated(report);
-    await snsService.publishEmergencyAlert({
-      reportId,
-      category: report.category,
-      priority: report.priority,
-      latitude: report.latitude,
-      longitude: report.longitude,
-    });
+    if (status !== REPORT_STATUS.CANCELLED) {
+      await notificationService.notifyReportCreated(report);
+      await snsService.publishEmergencyAlert({
+        reportId,
+        category: report.category,
+        priority: report.priority,
+        latitude: report.latitude,
+        longitude: report.longitude,
+      });
+    }
 
     return report;
   }
@@ -83,6 +93,27 @@ class ReportService {
     return report;
   }
 
+  async getPublicReportById(reportId) {
+    const report = await reportRepository.findById(reportId);
+    if (!report) throw new NotFoundError('Report not found');
+    
+    let reporterName = 'Ciudadano';
+    let reporterTrustScore = 50;
+    try {
+      const user = await userRepository.findById(report.userId);
+      if (user) {
+        reporterName = user.name;
+        reporterTrustScore = user.trustScore ?? 50;
+      }
+    } catch (err) {}
+
+    return {
+      ...report,
+      reporterName,
+      reporterTrustScore,
+    };
+  }
+
   async updateStatus(reportId, status, currentUser, notes) {
     const report = await this.getReportById(reportId, currentUser);
     const updates = {
@@ -104,7 +135,68 @@ class ReportService {
   }
 
   async resolveReport(reportId, currentUser) {
-    return this.updateStatus(reportId, REPORT_STATUS.RESOLVED, currentUser);
+    const res = await this.updateStatus(reportId, REPORT_STATUS.RESOLVED, currentUser);
+    
+    // Premiar al usuario que lo reportó
+    const user = await userRepository.findById(res.userId);
+    if (user) {
+      await userRepository.update(user.userId, { trustScore: (user.trustScore || 50) + 10 });
+    }
+    
+    return res;
+  }
+
+  async deleteReport(reportId, currentUser) {
+    const report = await this.getReportById(reportId, currentUser);
+    // En lugar de borrarlo físicamente, lo marcamos como eliminado para el historial
+    await reportRepository.update(reportId, { status: 'deleted', updatedAt: nowISO() });
+    await this._logActivity('report', reportId, 'REPORT_DELETED', currentUser.userId, {});
+    return { success: true };
+  }
+
+  async voteReport(reportId, voteType, currentUser) {
+    const report = await reportRepository.findById(reportId);
+    if (!report) {
+      throw new NotFoundError('Report not found');
+    }
+    
+    if (report.userId === currentUser.userId) {
+      throw new ForbiddenError('No puedes votar tu propio reporte');
+    }
+
+    const upvotes = Array.isArray(report.upvotes) ? report.upvotes : [];
+    const downvotes = Array.isArray(report.downvotes) ? report.downvotes : [];
+
+    if (upvotes.includes(currentUser.userId) || downvotes.includes(currentUser.userId)) {
+      throw new ForbiddenError('Ya has votado en este reporte');
+    }
+
+    const updates = { updatedAt: nowISO() };
+    const author = await userRepository.findById(report.userId);
+    let newScore = author?.trustScore || 50;
+
+    if (voteType === 'upvote') {
+      updates.upvotes = [...upvotes, currentUser.userId];
+      if (updates.upvotes.length >= 3 && report.status === REPORT_STATUS.PENDING) {
+        updates.status = 'verified'; // Lo usamos lógicamente
+        newScore += 5;
+      }
+    } else if (voteType === 'downvote') {
+      updates.downvotes = [...downvotes, currentUser.userId];
+      if (updates.downvotes.length >= 3) {
+        updates.status = REPORT_STATUS.CANCELLED; // Lo oculta
+        newScore -= 15;
+      }
+    }
+
+    if (author && newScore !== author.trustScore) {
+      await userRepository.update(author.userId, { trustScore: Math.max(0, newScore) });
+    }
+
+    const updated = await reportRepository.update(reportId, updates);
+    await this._logActivity('report', reportId, 'REPORT_VOTED', currentUser.userId, { voteType });
+
+    return updated;
   }
 
   async getNearbyReports({ latitude, longitude, radiusKm = 5, query = {} }) {

@@ -139,6 +139,31 @@ class AuthService {
     return toPublicUser(user);
   }
 
+  async updateProfile(userId, data) {
+    const user = await userRepository.findById(userId);
+    if (!user) throw new NotFoundError('User not found');
+    
+    await userRepository.update(userId, {
+      name: data.name,
+      phone: data.phone,
+    });
+    
+    return this.getProfile(userId);
+  }
+
+  async updatePassword(userId, { currentPassword, newPassword }) {
+    const user = await userRepository.findById(userId);
+    if (!user) throw new NotFoundError('User not found');
+    
+    const isValid = await comparePassword(currentPassword, user.password);
+    if (!isValid) throw new UnauthorizedError('Current password is incorrect');
+    
+    const hashedPassword = await hashPassword(newPassword);
+    await userRepository.update(userId, { password: hashedPassword });
+    
+    return { message: 'Password updated successfully' };
+  }
+
   _generateTokens(user) {
     const payload = { userId: user.userId, email: user.email, role: user.role };
     return {

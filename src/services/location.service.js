@@ -22,7 +22,8 @@ class LocationService {
     reports = reports.filter(
       (r) =>
         isValidCoordinate(r.latitude, r.longitude) &&
-        r.status !== REPORT_STATUS.CANCELLED,
+        r.status !== REPORT_STATUS.CANCELLED &&
+        r.status !== 'deleted',
     );
 
     return reports.map((r) => ({
@@ -33,6 +34,9 @@ class LocationService {
       status: r.status,
       priority: r.priority,
       title: r.title,
+      createdAt: r.createdAt,
+      upvotesCount: Array.isArray(r.upvotes) ? r.upvotes.length : 0,
+      downvotesCount: Array.isArray(r.downvotes) ? r.downvotes.length : 0,
     }));
   }
 

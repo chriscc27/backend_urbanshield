@@ -14,6 +14,8 @@ const createReportEntity = ({
   createdAt,
   updatedAt,
   resolvedAt = null,
+  upvotes = [],
+  downvotes = [],
 }) => ({
   reportId,
   userId,
@@ -30,6 +32,8 @@ const createReportEntity = ({
   createdAt,
   updatedAt,
   resolvedAt,
+  upvotes,
+  downvotes,
 });
 
 module.exports = {
