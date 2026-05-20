@@ -31,6 +31,16 @@ const logoutSchema = Joi.object({
   refreshToken: Joi.string().optional(),
 });
 
+const updateProfileSchema = Joi.object({
+  name: Joi.string().min(2).max(100).required(),
+  phone: Joi.string().max(20).optional().allow(null, ''),
+});
+
+const updatePasswordSchema = Joi.object({
+  currentPassword: Joi.string().required(),
+  newPassword: Joi.string().min(8).max(128).required(),
+});
+
 module.exports = {
   registerSchema,
   loginSchema,
@@ -38,4 +48,6 @@ module.exports = {
   forgotPasswordSchema,
   resetPasswordSchema,
   logoutSchema,
+  updateProfileSchema,
+  updatePasswordSchema,
 };

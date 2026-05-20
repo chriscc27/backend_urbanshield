@@ -37,6 +37,16 @@ const getProfile = asyncHandler(async (req, res) => {
   sendSuccess(res, { message: 'Profile retrieved', data: user });
 });
 
+const updateProfile = asyncHandler(async (req, res) => {
+  const user = await authService.updateProfile(req.user.userId, req.body);
+  sendSuccess(res, { message: 'Profile updated', data: user });
+});
+
+const updatePassword = asyncHandler(async (req, res) => {
+  const result = await authService.updatePassword(req.user.userId, req.body);
+  sendSuccess(res, { message: result.message, data: result });
+});
+
 module.exports = {
   register,
   login,
@@ -45,4 +55,6 @@ module.exports = {
   forgotPassword,
   resetPassword,
   getProfile,
+  updateProfile,
+  updatePassword,
 };

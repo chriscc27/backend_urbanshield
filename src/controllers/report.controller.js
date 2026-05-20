@@ -17,6 +17,11 @@ const getReport = asyncHandler(async (req, res) => {
   sendSuccess(res, { message: 'Report retrieved', data: report });
 });
 
+const getPublicReport = asyncHandler(async (req, res) => {
+  const report = await reportService.getPublicReportById(req.params.id);
+  sendSuccess(res, { message: 'Report retrieved', data: report });
+});
+
 const updateStatus = asyncHandler(async (req, res) => {
   const report = await reportService.updateStatus(
     req.params.id,
@@ -30,6 +35,16 @@ const updateStatus = asyncHandler(async (req, res) => {
 const resolveReport = asyncHandler(async (req, res) => {
   const report = await reportService.resolveReport(req.params.id, req.user);
   sendSuccess(res, { message: 'Report resolved', data: report });
+});
+
+const voteReport = asyncHandler(async (req, res) => {
+  const report = await reportService.voteReport(req.params.id, req.body.voteType, req.user);
+  sendSuccess(res, { message: 'Vote registered', data: report });
+});
+
+const deleteReport = asyncHandler(async (req, res) => {
+  await reportService.deleteReport(req.params.id, req.user);
+  sendSuccess(res, { message: 'Report deleted', data: null });
 });
 
 const getNearby = asyncHandler(async (req, res) => {
@@ -51,8 +66,11 @@ module.exports = {
   createReport,
   listReports,
   getReport,
+  getPublicReport,
   updateStatus,
   resolveReport,
+  voteReport,
+  deleteReport,
   getNearby,
   getAnalytics,
 };

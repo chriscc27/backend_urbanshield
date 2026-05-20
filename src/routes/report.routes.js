@@ -20,6 +20,7 @@ router.get('/', validate(listReportsQuerySchema, 'query'), reportController.list
 router.get('/analytics', authorize(ROLES.ADMIN), reportController.getAnalytics);
 router.get('/nearby', validate(nearbyQuerySchema, 'query'), reportController.getNearby);
 router.post('/', validate(createReportSchema), reportController.createReport);
+router.get('/:id/public', validate(reportIdParamSchema, 'params'), reportController.getPublicReport);
 router.get('/:id', validate(reportIdParamSchema, 'params'), reportController.getReport);
 router.patch(
   '/:id/status',
@@ -33,6 +34,18 @@ router.post(
   authorize(ROLES.ADMIN),
   validate(reportIdParamSchema, 'params'),
   reportController.resolveReport,
+);
+
+router.post(
+  '/:id/vote',
+  validate(reportIdParamSchema, 'params'),
+  reportController.voteReport,
+);
+
+router.delete(
+  '/:id',
+  validate(reportIdParamSchema, 'params'),
+  reportController.deleteReport,
 );
 
 module.exports = router;

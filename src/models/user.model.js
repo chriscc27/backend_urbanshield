@@ -6,6 +6,11 @@ const toPublicUser = (user) => {
     passwordResetToken,
     ...publicUser
   } = user;
+  
+  if (publicUser.trustScore === undefined) {
+    publicUser.trustScore = 50;
+  }
+  
   return publicUser;
 };
 
@@ -17,6 +22,7 @@ const createUserEntity = ({
   role,
   phone = null,
   isActive = true,
+  trustScore = 50,
   createdAt,
   updatedAt,
 }) => ({
@@ -27,6 +33,7 @@ const createUserEntity = ({
   role,
   phone,
   isActive,
+  trustScore,
   createdAt,
   updatedAt,
 });
