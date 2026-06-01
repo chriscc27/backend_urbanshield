@@ -4,7 +4,7 @@ const { HeadBucketCommand } = require('@aws-sdk/client-s3');
 const { ListTopicsCommand } = require('@aws-sdk/client-sns');
 const { DescribeUserPoolCommand } = require('@aws-sdk/client-cognito-identity-provider');
 const { GetMapTileCommand } = require('@aws-sdk/client-location');
-const { env } = require('../config/env');
+const { awsInfrastructure } = require('../config/aws');
 const logger = require('../utils/logger');
 
 async function checkDynamo() {
@@ -18,10 +18,10 @@ async function checkDynamo() {
 }
 
 async function checkS3() {
-  if (!env.s3.bucketName) return { ok: false, message: 'S3_BUCKET_NAME not configured' };
+  if (!awsInfrastructure.s3.bucketName) return { ok: false, message: 'S3_BUCKET_NAME not configured' };
   try {
     const client = getS3Client();
-    await client.send(new HeadBucketCommand({ Bucket: env.s3.bucketName }));
+    await client.send(new HeadBucketCommand({ Bucket: awsInfrastructure.s3.bucketName }));
     return { ok: true };
   } catch (err) {
     return { ok: false, message: err.message };
@@ -39,10 +39,10 @@ async function checkSns() {
 }
 
 async function checkCognito() {
-  if (!env.cognito.userPoolId) return { ok: false, message: 'COGNITO_USER_POOL_ID not configured' };
+  if (!awsInfrastructure.cognito.userPoolId) return { ok: false, message: 'COGNITO_USER_POOL_ID not configured' };
   try {
     const client = getCognitoClient();
-    await client.send(new DescribeUserPoolCommand({ UserPoolId: env.cognito.userPoolId }));
+    await client.send(new DescribeUserPoolCommand({ UserPoolId: awsInfrastructure.cognito.userPoolId }));
     return { ok: true };
   } catch (err) {
     return { ok: false, message: err.message };
@@ -50,13 +50,13 @@ async function checkCognito() {
 }
 
 async function checkLocation() {
-  if (!env.location.mapName && !env.location.placeIndex) return { ok: false, message: 'LOCATION_MAP_NAME and LOCATION_PLACE_INDEX not configured' };
+  if (!awsInfrastructure.location.mapName && !awsInfrastructure.location.placeIndex) return { ok: false, message: 'LOCATION_MAP_NAME and LOCATION_PLACE_INDEX not configured' };
   try {
     const client = getLocationClient();
     // try a harmless GetMapTile if mapName exists
-    if (env.location.mapName) {
+    if (awsInfrastructure.location.mapName) {
       try {
-        await client.send(new GetMapTileCommand({ MapName: env.location.mapName, Z: 0, X: 0, Y: 0 }));
+        await client.send(new GetMapTileCommand({ MapName: awsInfrastructure.location.mapName, Z: 0, X: 0, Y: 0 }));
         return { ok: true };
       } catch (err) {
         return { ok: false, message: `Map access failed: ${err.message}` };

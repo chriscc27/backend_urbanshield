@@ -13,6 +13,7 @@ const { nowISO } = require('../helpers/dateHelper');
 const { ROLES } = require('../constants/roles');
 const { ConflictError, UnauthorizedError, NotFoundError, BadRequestError } = require('../errors/AppError');
 const { env } = require('../config/env');
+const { awsInfrastructure } = require('../config/aws');
 const cognitoService = require('../aws/cognito.service');
 const activityLogRepository = require('../repositories/activityLog.repository');
 const { createActivityLogEntity } = require('../models/activityLog.model');
@@ -20,7 +21,7 @@ const { generateActivityId } = require('../helpers/idHelper');
 
 class AuthService {
   async register({ email, password, name, role = ROLES.CITIZEN, phone }) {
-    if (env.cognito.useCognito && env.cognito.userPoolId) {
+    if (awsInfrastructure.cognito.useCognito && awsInfrastructure.cognito.userPoolId) {
       await cognitoService.signUp({ email, password, name, role });
     }
 
@@ -101,7 +102,7 @@ class AuthService {
       return { message: 'If the email exists, a reset link will be sent' };
     }
 
-    if (env.cognito.useCognito) {
+    if (awsInfrastructure.cognito.useCognito) {
       await cognitoService.forgotPassword(email);
       return { message: 'Password reset initiated via Cognito' };
     }

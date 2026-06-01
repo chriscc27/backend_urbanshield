@@ -7,7 +7,7 @@ const {
   AdminGetUserCommand,
 } = require('@aws-sdk/client-cognito-identity-provider');
 const { getCognitoClient } = require('./clients');
-const { env } = require('../config/env');
+const { awsInfrastructure } = require('../config/aws');
 const { AppError } = require('../errors/AppError');
 const { HTTP_STATUS } = require('../constants/httpStatus');
 const logger = require('../utils/logger');
@@ -19,9 +19,9 @@ const logger = require('../utils/logger');
 class CognitoService {
   constructor() {
     this.client = getCognitoClient();
-    this.userPoolId = env.cognito.userPoolId;
-    this.clientId = env.cognito.clientId;
-    this.enabled = env.cognito.useCognito;
+    this.userPoolId = awsInfrastructure.cognito.userPoolId;
+    this.clientId = awsInfrastructure.cognito.clientId;
+    this.enabled = awsInfrastructure.cognito.useCognito;
   }
 
   ensureConfigured() {

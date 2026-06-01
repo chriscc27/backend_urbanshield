@@ -1,6 +1,6 @@
 const { PublishCommand } = require('@aws-sdk/client-sns');
 const { getSnsClient } = require('./clients');
-const { env } = require('../config/env');
+const { awsInfrastructure } = require('../config/aws');
 const logger = require('../utils/logger');
 
 class SnsService {
@@ -31,7 +31,7 @@ class SnsService {
 
   async publishEmergencyAlert(payload) {
     return this.publishToTopic(
-      env.sns.emergencyAlertsTopic,
+      awsInfrastructure.sns.emergencyAlertsTopic,
       payload,
       `UrbanShield Emergency: ${payload.category || 'Alert'}`,
     );
@@ -39,7 +39,7 @@ class SnsService {
 
   async publishActivityNotification(payload) {
     return this.publishToTopic(
-      env.sns.activityNotificationsTopic,
+      awsInfrastructure.sns.activityNotificationsTopic,
       payload,
       'UrbanShield Activity',
     );

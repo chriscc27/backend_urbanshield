@@ -1,9 +1,9 @@
 const multer = require('multer');
 const path = require('path');
-const { env } = require('../config/env');
+const { awsInfrastructure } = require('../config/aws');
 
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'];
-const maxSize = env.s3.maxSizeMb * 1024 * 1024;
+const maxSize = awsInfrastructure.s3.maxSizeMb * 1024 * 1024;
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {

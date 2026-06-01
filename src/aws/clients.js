@@ -6,8 +6,7 @@ const {
   CognitoIdentityProviderClient,
 } = require('@aws-sdk/client-cognito-identity-provider');
 const { LocationClient } = require('@aws-sdk/client-location');
-const { getAwsClientConfig } = require('../config/aws');
-const { env } = require('../config/env');
+const { getAwsClientConfig, getDynamoDbClientConfig } = require('../config/aws');
 
 let dynamoDbClient = null;
 let dynamoDbDocClient = null;
@@ -18,11 +17,7 @@ let locationClient = null;
 
 const getDynamoDbClient = () => {
   if (!dynamoDbClient) {
-    const config = getAwsClientConfig();
-    if (env.aws.dynamodbEndpoint) {
-      config.endpoint = env.aws.dynamodbEndpoint;
-    }
-    dynamoDbClient = new DynamoDBClient(config);
+    dynamoDbClient = new DynamoDBClient(getDynamoDbClientConfig());
   }
   return dynamoDbClient;
 };

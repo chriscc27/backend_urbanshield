@@ -1,6 +1,6 @@
 const { SearchPlaceIndexForTextCommand, GetMapTileCommand } = require('@aws-sdk/client-location');
 const { getLocationClient } = require('./clients');
-const { env } = require('../config/env');
+const { awsInfrastructure } = require('../config/aws');
 const logger = require('../utils/logger');
 
 /**
@@ -9,8 +9,8 @@ const logger = require('../utils/logger');
 class LocationService {
   constructor() {
     this.client = getLocationClient();
-    this.placeIndex = env.location.placeIndex;
-    this.mapName = env.location.mapName;
+    this.placeIndex = awsInfrastructure.location.placeIndex;
+    this.mapName = awsInfrastructure.location.mapName;
   }
 
   async searchPlaces(text, maxResults = 5) {

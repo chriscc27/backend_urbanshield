@@ -1,7 +1,7 @@
 const { PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { getS3Client } = require('./clients');
-const { env } = require('../config/env');
+const { awsInfrastructure } = require('../config/aws');
 const { AppError } = require('../errors/AppError');
 const { HTTP_STATUS } = require('../constants/httpStatus');
 const logger = require('../utils/logger');
@@ -9,7 +9,7 @@ const logger = require('../utils/logger');
 class S3Service {
   constructor() {
     this.client = getS3Client();
-    this.bucket = env.s3.bucketName;
+    this.bucket = awsInfrastructure.s3.bucketName;
   }
 
   async getPresignedUploadUrl({ key, contentType }) {
@@ -20,10 +20,10 @@ class S3Service {
         ContentType: contentType,
       });
       const uploadUrl = await getSignedUrl(this.client, command, {
-        expiresIn: env.s3.presignedUrlExpiresIn,
+        expiresIn: awsInfrastructure.s3.presignedUrlExpiresIn,
       });
-      const publicUrl = `https://${this.bucket}.s3.${env.aws.region}.amazonaws.com/${key}`;
-      return { uploadUrl, publicUrl, key, expiresIn: env.s3.presignedUrlExpiresIn };
+      const publicUrl = `https://${this.bucket}.s3.${awsInfrastructure.region}.amazonaws.com/${key}`;
+      return { uploadUrl, publicUrl, key, expiresIn: awsInfrastructure.s3.presignedUrlExpiresIn };
     } catch (error) {
       logger.error('S3 presigned URL generation failed', { error: error.message });
       throw new AppError('Failed to generate upload URL', HTTP_STATUS.SERVICE_UNAVAILABLE, 'AWS_SERVICE_ERROR');
