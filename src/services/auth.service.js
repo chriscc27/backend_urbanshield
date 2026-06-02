@@ -233,8 +233,16 @@ class AuthService {
     const user = await userRepository.findById(userId);
     if (!user) throw new NotFoundError('User not found');
     
-    const isValid = await comparePassword(currentPassword, user.password);
-    if (!isValid) throw new UnauthorizedError('Current password is incorrect');
+    // Si usamos cognito, debemos verificar la contraseña vieja en cognito
+    if (awsInfrastructure.cognito.useCognito) {
+      // Verificamos usando signIn
+      await cognitoService.signIn({ email: user.email, password: currentPassword });
+      // Si pasa, lo cambiamos en cognito
+      await cognitoService.changePassword(user.email, newPassword);
+    } else {
+      const isValid = await comparePassword(currentPassword, user.password);
+      if (!isValid) throw new UnauthorizedError('Current password is incorrect');
+    }
     
     const hashedPassword = await hashPassword(newPassword);
     await userRepository.update(userId, { password: hashedPassword });

@@ -5,34 +5,67 @@ provider:
   runtime: nodejs18.x
   stage: ${opt:stage, 'dev'}
   region: ${opt:region, 'us-east-1'}
+
+  # CORS configuration for HTTP API Gateway
+  httpApi:
+    cors:
+      allowedOrigins:
+        - http://localhost:5173
+        - http://urbanshield-frontend-${self:provider.stage}.s3-website-us-east-1.amazonaws.com
+        - https://dwnlwnmcbiheu.cloudfront.net
+      allowedHeaders:
+        - Content-Type
+        - Authorization
+        - X-Request-Id
+      allowedMethods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      allowCredentials: true
+
   environment:
     NODE_ENV: production
     API_PREFIX: /api
     USE_IN_MEMORY_STORE: "false"
+    # DynamoDB tables
     DYNAMODB_TABLE_USERS: !Ref UsersTable
     DYNAMODB_TABLE_REPORTS: !Ref ReportsTable
     DYNAMODB_TABLE_NOTIFICATIONS: !Ref NotificationsTable
     DYNAMODB_TABLE_ACTIVITY_LOGS: !Ref ActivityLogsTable
     DYNAMODB_TABLE_SUPPORT_MESSAGES: !Ref SupportMessagesTable
+    # S3 buckets
     S3_BUCKET_NAME: ${self:custom.s3BucketName}
     S3_PROFILE_BUCKET_NAME: ${self:custom.profileBucketName}
-    USE_COGNITO: "false"
+    # Cognito
+    USE_COGNITO: ${env:USE_COGNITO, 'true'}
+    COGNITO_USER_POOL_ID: ${env:COGNITO_USER_POOL_ID, ''}
+    COGNITO_CLIENT_ID: ${env:COGNITO_CLIENT_ID, ''}
+    # JWT
     JWT_ACCESS_SECRET: ${env:JWT_ACCESS_SECRET}
     JWT_REFRESH_SECRET: ${env:JWT_REFRESH_SECRET}
     JWT_ACCESS_EXPIRES_IN: ${env:JWT_ACCESS_EXPIRES_IN, '15m'}
     JWT_REFRESH_EXPIRES_IN: ${env:JWT_REFRESH_EXPIRES_IN, '7d'}
-    CORS_ORIGIN: ${env:CORS_ORIGIN, 'http://localhost:5173'}
-    FRONTEND_URL: ${env:FRONTEND_URL, 'http://localhost:5173'}
-    COGNITO_USER_POOL_ID: ${env:COGNITO_USER_POOL_ID, ''}
-    COGNITO_CLIENT_ID: ${env:COGNITO_CLIENT_ID, ''}
+    # CORS and frontend
+    CORS_ORIGIN: "http://localhost:5173,http://urbanshield-frontend-${self:provider.stage}.s3-website-us-east-1.amazonaws.com,https://dwnlwnmcbiheu.cloudfront.net"
+    FRONTEND_URL: "https://dwnlwnmcbiheu.cloudfront.net"
+    # SNS
     SNS_TOPIC_EMERGENCY_ALERTS: !Ref EmergencyAlertsTopic
+    # Location Service
     LOCATION_MAP_NAME: ${env:LOCATION_MAP_NAME, 'UrbanShieldMap'}
     LOCATION_PLACE_INDEX: ${env:LOCATION_PLACE_INDEX, 'UrbanShieldPlaceIndex'}
+    # Email
+    EMAIL_USER: ${env:EMAIL_USER, ''}
+    EMAIL_PASS: ${env:EMAIL_PASS, ''}
+    # Password reset
+    PASSWORD_RESET_TOKEN_EXPIRES_IN: ${env:PASSWORD_RESET_TOKEN_EXPIRES_IN, '1h'}
 
   iam:
     role:
       statements:
-        # Permisos para DynamoDB
+        # Permisos para DynamoDB (tablas + todos los GSIs)
         - Effect: Allow
           Action:
             - dynamodb:GetItem
@@ -43,13 +76,15 @@ provider:
             - dynamodb:Query
           Resource:
             - !GetAtt UsersTable.Arn
-            - !Sub ${UsersTable.Arn}/index/GSI_Email
+            - !Sub ${UsersTable.Arn}/index/*
             - !GetAtt ReportsTable.Arn
+            - !Sub ${ReportsTable.Arn}/index/*
             - !GetAtt NotificationsTable.Arn
+            - !Sub ${NotificationsTable.Arn}/index/*
             - !GetAtt ActivityLogsTable.Arn
+            - !Sub ${ActivityLogsTable.Arn}/index/*
             - !GetAtt SupportMessagesTable.Arn
-            - !Sub ${SupportMessagesTable.Arn}/index/GSI_StatusCreatedAt
-            - !Sub ${SupportMessagesTable.Arn}/index/GSI_UserIdCreatedAt
+            - !Sub ${SupportMessagesTable.Arn}/index/*
 
         # Permisos para S3 (Subida de fotos vía URL presignada)
         - Effect: Allow
@@ -75,13 +110,33 @@ provider:
             - geo:GetMapTile
           Resource: "*"
 
+        # Permisos para Amazon Cognito
+        - Effect: Allow
+          Action:
+            - cognito-idp:AdminInitiateAuth
+            - cognito-idp:AdminCreateUser
+            - cognito-idp:AdminDeleteUser
+            - cognito-idp:AdminDisableUser
+            - cognito-idp:AdminEnableUser
+            - cognito-idp:AdminGetUser
+            - cognito-idp:AdminListGroupsForUser
+            - cognito-idp:AdminUpdateUserAttributes
+            - cognito-idp:AdminSetUserPassword
+            - cognito-idp:ListUsers
+            - cognito-idp:SignUp
+            - cognito-idp:ConfirmSignUp
+          Resource: "*"
+
 custom:
   s3BucketName: urbanshield-uploads-${self:provider.stage}-${aws:accountId}
   profileBucketName: urbanshield-profile-photos-${self:provider.stage}-${aws:accountId}
+  frontendBucketName: urbanshield-frontend-${self:provider.stage}
 
 functions:
   api:
     handler: src/lambda.handler
+    timeout: 29
+    memorySize: 512
     events:
       - httpApi:
           method: ANY
@@ -92,7 +147,9 @@ functions:
 
 resources:
   Resources:
+    # ──────────────────────────────────────────
     # 1. Tabla de Usuarios
+    # ──────────────────────────────────────────
     UsersTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -114,7 +171,9 @@ resources:
             Projection:
               ProjectionType: ALL
 
-    # 2. Tabla de Reportes
+    # ──────────────────────────────────────────
+    # 2. Tabla de Reportes (con GSIs completos)
+    # ──────────────────────────────────────────
     ReportsTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -123,11 +182,46 @@ resources:
         AttributeDefinitions:
           - AttributeName: reportId
             AttributeType: S
+          - AttributeName: status
+            AttributeType: S
+          - AttributeName: category
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
         KeySchema:
           - AttributeName: reportId
             KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: GSI_StatusCreatedAt
+            KeySchema:
+              - AttributeName: status
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: GSI_CategoryCreatedAt
+            KeySchema:
+              - AttributeName: category
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: GSI_UserIdCreatedAt
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
 
-    # 3. Tabla de Notificaciones
+    # ──────────────────────────────────────────
+    # 3. Tabla de Notificaciones (con GSI)
+    # ──────────────────────────────────────────
     NotificationsTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -136,11 +230,26 @@ resources:
         AttributeDefinitions:
           - AttributeName: notificationId
             AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
         KeySchema:
           - AttributeName: notificationId
             KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: GSI_UserIdCreatedAt
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
 
-    # 4. Tabla de Auditoría
+    # ──────────────────────────────────────────
+    # 4. Tabla de Auditoría (con GSI)
+    # ──────────────────────────────────────────
     ActivityLogsTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -149,11 +258,26 @@ resources:
         AttributeDefinitions:
           - AttributeName: activityId
             AttributeType: S
+          - AttributeName: entityType
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
         KeySchema:
           - AttributeName: activityId
             KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: GSI_EntityTypeCreatedAt
+            KeySchema:
+              - AttributeName: entityType
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
 
-    # 5. Tabla de soporte / inbox
+    # ──────────────────────────────────────────
+    # 5. Tabla de soporte / inbox (con GSIs)
+    # ──────────────────────────────────────────
     SupportMessagesTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -189,32 +313,56 @@ resources:
             Projection:
               ProjectionType: ALL
 
-    # 6. Bucket de S3 para subida de fotos de reportes
-    S3UploadsBucket:
-      Type: AWS::S3::Bucket
-      Properties:
-        BucketName: ${self:custom.s3BucketName}
-        CorsConfiguration:
-          CorsRules:
-            - AllowedHeaders: ['*']
-              AllowedMethods: [PUT, GET, HEAD]
-              AllowedOrigins: ['*']
-              MaxAge: 3600
+    # NOTE: S3 uploads bucket (urbanshield-uploads-dev-*) and profile photos bucket
+    # already exist in AWS from previous deployments. They are NOT managed by this
+    # stack to avoid conflicts. Referenced via env vars S3_BUCKET_NAME and S3_PROFILE_BUCKET_NAME.
 
-    # 7. Bucket de S3 para fotos de perfil
-    S3ProfilePhotosBucket:
-      Type: AWS::S3::Bucket
-      Properties:
-        BucketName: ${self:custom.profileBucketName}
-        CorsConfiguration:
-          CorsRules:
-            - AllowedHeaders: ['*']
-              AllowedMethods: [PUT, GET, HEAD]
-              AllowedOrigins: ['*']
-              MaxAge: 3600
 
+    # ──────────────────────────────────────────
     # 8. Tema de Amazon SNS para Alertas
+    # ──────────────────────────────────────────
     EmergencyAlertsTopic:
       Type: AWS::SNS::Topic
       Properties:
         TopicName: UrbanShield-EmergencyAlerts-${self:provider.stage}
+
+    # ──────────────────────────────────────────
+    # 9. Bucket S3 para Frontend estático
+    # ──────────────────────────────────────────
+    FrontendBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.frontendBucketName}
+        WebsiteConfiguration:
+          IndexDocument: index.html
+          ErrorDocument: index.html
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+          BlockPublicPolicy: false
+          IgnorePublicAcls: false
+          RestrictPublicBuckets: false
+        OwnershipControls:
+          Rules:
+            - ObjectOwnership: BucketOwnerPreferred
+
+    FrontendBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref FrontendBucket
+        PolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: '*'
+              Action: s3:GetObject
+              Resource: !Sub '${FrontendBucket.Arn}/*'
+
+  Outputs:
+    FrontendBucketUrl:
+      Description: URL of the frontend static website
+      Value: !GetAtt FrontendBucket.WebsiteURL
+    FrontendBucketName:
+      Description: Name of the frontend S3 bucket
+      Value: !Ref FrontendBucket
+    ApiGatewayUrl:
+      Description: URL of the API Gateway
+      Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'

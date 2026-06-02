@@ -95,7 +95,10 @@ class CognitoService {
       return result.AuthenticationResult;
     } catch (error) {
       logger.error('Cognito signIn failed', { error: error.message });
-      throw new AppError(`Cognito Error: ${error.name} - ${error.message}`, HTTP_STATUS.UNAUTHORIZED, 'INVALID_CREDENTIALS');
+      if (error.name === 'NotAuthorizedException' || error.name === 'UserNotFoundException') {
+        throw new AppError('Correo electrónico o contraseña incorrectos.', HTTP_STATUS.UNAUTHORIZED, 'INVALID_CREDENTIALS');
+      }
+      throw new AppError(`Error de autenticación: ${error.message}`, HTTP_STATUS.UNAUTHORIZED, 'AUTH_ERROR');
     }
   }
 
@@ -128,6 +131,24 @@ class CognitoService {
     return this.client.send(
       new AdminGetUserCommand({ UserPoolId: this.userPoolId, Username: username }),
     );
+  }
+
+  async changePassword(email, newPassword) {
+    this.ensureConfigured();
+    const { AdminSetUserPasswordCommand } = require('@aws-sdk/client-cognito-identity-provider');
+    try {
+      await this.client.send(
+        new AdminSetUserPasswordCommand({
+          UserPoolId: this.userPoolId,
+          Username: email,
+          Password: newPassword,
+          Permanent: true,
+        })
+      );
+    } catch (error) {
+      logger.error('Cognito changePassword failed', { error: error.message });
+      throw new AppError(`Cognito Error: ${error.name} - ${error.message}`, HTTP_STATUS.BAD_REQUEST, 'PASSWORD_CHANGE_FAILED');
+    }
   }
 }
 

@@ -204,6 +204,9 @@ const getAwsClientConfig = () => {
       accessKeyId: env.aws.accessKeyId,
       secretAccessKey: env.aws.secretAccessKey,
     };
+    if (env.aws.sessionToken) {
+      config.credentials.sessionToken = env.aws.sessionToken;
+    }
   }
 
   return config;
