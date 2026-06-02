@@ -59,6 +59,10 @@ class AuthService {
       await snsService.subscribeEmail(awsInfrastructure.sns.emergencyAlertsTopic, email);
     }
 
+    if (awsInfrastructure.cognito.useCognito) {
+      return this.login({ email, password });
+    }
+
     const tokens = this._generateTokens(user);
     return { user: toPublicUser(user), tokens };
   }
