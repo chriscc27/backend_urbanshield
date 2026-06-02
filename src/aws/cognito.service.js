@@ -48,6 +48,28 @@ class CognitoService {
           ],
         }),
       );
+
+      // Auto-confirmar al usuario usando comandos de Admin para que puedan hacer login sin código de confirmación
+      const { AdminConfirmSignUpCommand, AdminUpdateUserAttributesCommand } = require('@aws-sdk/client-cognito-identity-provider');
+      
+      await this.client.send(
+        new AdminConfirmSignUpCommand({
+          UserPoolId: this.userPoolId,
+          Username: email,
+        })
+      );
+
+      // Auto-verificar el correo para que funcione el Forgot Password
+      await this.client.send(
+        new AdminUpdateUserAttributesCommand({
+          UserPoolId: this.userPoolId,
+          Username: email,
+          UserAttributes: [
+            { Name: 'email_verified', Value: 'true' }
+          ]
+        })
+      );
+
       return result;
     } catch (error) {
       logger.error('Cognito signUp failed', { error: error.message });
@@ -58,10 +80,12 @@ class CognitoService {
   async signIn({ email, password }) {
     this.ensureConfigured();
     try {
+      const { AdminInitiateAuthCommand } = require('@aws-sdk/client-cognito-identity-provider');
       const result = await this.client.send(
-        new InitiateAuthCommand({
-          AuthFlow: 'USER_PASSWORD_AUTH',
+        new AdminInitiateAuthCommand({
+          UserPoolId: this.userPoolId,
           ClientId: this.clientId,
+          AuthFlow: 'ADMIN_NO_SRP_AUTH',
           AuthParameters: {
             USERNAME: email,
             PASSWORD: password,
@@ -71,7 +95,7 @@ class CognitoService {
       return result.AuthenticationResult;
     } catch (error) {
       logger.error('Cognito signIn failed', { error: error.message });
-      throw new AppError('Invalid credentials', HTTP_STATUS.UNAUTHORIZED, 'INVALID_CREDENTIALS');
+      throw new AppError(`Cognito Error: ${error.name} - ${error.message}`, HTTP_STATUS.UNAUTHORIZED, 'INVALID_CREDENTIALS');
     }
   }
 

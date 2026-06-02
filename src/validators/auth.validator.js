@@ -23,6 +23,7 @@ const forgotPasswordSchema = Joi.object({
 });
 
 const resetPasswordSchema = Joi.object({
+  email: Joi.string().email().optional(), // Needed for Cognito flow
   token: Joi.string().required(),
   newPassword: Joi.string().min(8).max(128).required(),
 });
