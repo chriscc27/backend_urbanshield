@@ -13,10 +13,22 @@ const normalizeCityCode = (cityCode = 'UNK') => {
   return normalized || 'UNK';
 };
 
-const generateReportId = (cityCode, sequence) => {
+const getCategoryPrefix = (category) => {
+  if (!category) return 'INC';
+  const c = category.toLowerCase();
+  if (c.includes('incendio')) return 'INC';
+  if (c.includes('inundacion') || c.includes('inundación')) return 'INU';
+  if (c.includes('delito') || c.includes('robo')) return 'DEL';
+  if (c.includes('accidente')) return 'ACC';
+  if (c.includes('bloqueo')) return 'BLO';
+  return 'OTR';
+};
+
+const generateReportId = (category, cityCode, sequence) => {
+  const prefix = getCategoryPrefix(category);
   const normalizedCity = normalizeCityCode(cityCode);
   const paddedSequence = String(sequence || 1).padStart(2, '0');
-  return `INC_${normalizedCity}_${paddedSequence}`;
+  return `${prefix}_${normalizedCity}_${paddedSequence}`;
 };
 
 const generateLegacyReportId = () => generateId('INC');

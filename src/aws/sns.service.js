@@ -29,6 +29,25 @@ class SnsService {
     }
   }
 
+  async subscribeEmail(topicArn, email) {
+    if (!topicArn) return null;
+    try {
+      const { SubscribeCommand } = require('@aws-sdk/client-sns');
+      const result = await this.client.send(
+        new SubscribeCommand({
+          TopicArn: topicArn,
+          Protocol: 'email',
+          Endpoint: email,
+        })
+      );
+      return result.SubscriptionArn;
+    } catch (error) {
+      logger.error('SNS subscribe failed', { error: error.message, topicArn, email });
+      // fail silently so it doesn't break auth flow
+      return null;
+    }
+  }
+
   async publishEmergencyAlert(payload) {
     return this.publishToTopic(
       awsInfrastructure.sns.emergencyAlertsTopic,
