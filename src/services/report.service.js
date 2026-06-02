@@ -30,29 +30,39 @@ const CITY_CODE_MAP = [
   { match: ['PANDO'], code: 'PND' },
 ];
 
-const resolveCityCode = async (latitude, longitude) => {
+const resolveLocationDetails = async (latitude, longitude) => {
   const place = await locationService.reverseGeocode(latitude, longitude);
   const cityText = [place?.city, place?.municipality, place?.region, place?.label]
     .filter(Boolean)
     .join(' ')
     .toUpperCase();
 
+  let code = normalizeCityCode(place?.city || place?.municipality || place?.region || 'UNK');
   for (const candidate of CITY_CODE_MAP) {
     if (candidate.match.some((needle) => cityText.includes(needle))) {
-      return candidate.code;
+      code = candidate.code;
+      break;
     }
   }
 
-  return normalizeCityCode(place?.city || place?.municipality || place?.region || 'UNK');
+  // derive exactZone from the first part of the label or municipality
+  let exactZone = 'Zona Desconocida';
+  if (place?.label) {
+    exactZone = place.label.split(',')[0].trim();
+  } else if (place?.municipality) {
+    exactZone = place.municipality;
+  }
+
+  return { cityCode: code, exactZone };
 };
 
 class ReportService {
   async createReport(userId, data) {
     const timestamp = nowISO();
     const priority = data.priority || CATEGORY_DEFAULT_PRIORITY[data.category] || REPORT_PRIORITY.MEDIUM;
-    const cityCode = await resolveCityCode(data.latitude, data.longitude);
+    const { cityCode, exactZone } = await resolveLocationDetails(data.latitude, data.longitude);
     const sequence = (await reportRepository.countByCityCode(cityCode)) + 1;
-    const reportId = generateReportId(cityCode, sequence);
+    const reportId = generateReportId(data.category, cityCode, sequence);
 
     // Verificar TrustScore del usuario para decidir si publicar
     const user = await userRepository.findById(userId);
@@ -71,7 +81,8 @@ class ReportService {
       description: data.description,
       latitude: data.latitude,
       longitude: data.longitude,
-      location: data.location,
+      location: data.location || exactZone,
+      exactZone,
       imageUrl: data.imageUrl || null,
       imageKeys: data.imageKeys || [],
       status: REPORT_STATUS.PENDING,
@@ -89,6 +100,10 @@ class ReportService {
         reportId,
         category: report.category,
         priority: report.priority,
+        title: report.title,
+        description: report.description,
+        location: report.location,
+        exactZone: report.exactZone,
         latitude: report.latitude,
         longitude: report.longitude,
       });
@@ -134,11 +149,13 @@ class ReportService {
     
     let reporterName = 'Ciudadano';
     let reporterTrustScore = 50;
+    let reporterAvatarUrl = null;
     try {
       const user = await userRepository.findById(report.userId);
       if (user) {
         reporterName = user.name;
         reporterTrustScore = user.trustScore ?? 50;
+        reporterAvatarUrl = user.avatarUrl || null;
       }
     } catch (err) {}
 
@@ -149,6 +166,7 @@ class ReportService {
         : (report.imageUrl ? [report.imageUrl] : []),
       reporterName,
       reporterTrustScore,
+      reporterAvatarUrl,
     };
   }
 
@@ -175,6 +193,7 @@ class ReportService {
           reporterName: user?.name || 'Ciudadano',
           reporterTrustScore: user?.trustScore ?? 50,
           reporterEmail: user?.email || null,
+          reporterAvatarUrl: user?.avatarUrl || null,
         };
       }),
     );

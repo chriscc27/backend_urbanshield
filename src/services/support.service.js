@@ -49,7 +49,7 @@ class SupportService {
       type: 'info',
       title: 'Respuesta de Soporte',
       message: `Un administrador ha respondido a tu consulta: "${existing.subject}"`,
-      metadata: { supportMessageId },
+      metadata: { supportMessageId, response },
     });
 
     return this._enrichMessage(updated);
