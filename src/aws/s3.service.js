@@ -9,20 +9,26 @@ const logger = require('../utils/logger');
 class S3Service {
   constructor() {
     this.client = getS3Client();
-    this.bucket = awsInfrastructure.s3.bucketName;
+    this.reportBucket = awsInfrastructure.s3.bucketName;
+    this.profileBucket = awsInfrastructure.s3.profileBucketName;
   }
 
-  async getPresignedUploadUrl({ key, contentType }) {
+  getBucketForPurpose(purpose = 'report') {
+    return purpose === 'profile' ? this.profileBucket : this.reportBucket;
+  }
+
+  async getPresignedUploadUrl({ key, contentType, purpose = 'report' }) {
     try {
+      const bucket = this.getBucketForPurpose(purpose);
       const command = new PutObjectCommand({
-        Bucket: this.bucket,
+        Bucket: bucket,
         Key: key,
         ContentType: contentType,
       });
       const uploadUrl = await getSignedUrl(this.client, command, {
         expiresIn: awsInfrastructure.s3.presignedUrlExpiresIn,
       });
-      const publicUrl = `https://${this.bucket}.s3.${awsInfrastructure.region}.amazonaws.com/${key}`;
+      const publicUrl = `https://${bucket}.s3.${awsInfrastructure.region}.amazonaws.com/${key}`;
       return { uploadUrl, publicUrl, key, expiresIn: awsInfrastructure.s3.presignedUrlExpiresIn };
     } catch (error) {
       logger.error('S3 presigned URL generation failed', { error: error.message });
@@ -32,7 +38,8 @@ class S3Service {
 
   async deleteObject(key) {
     try {
-      await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+      const bucket = key.startsWith('profiles/') ? this.profileBucket : this.reportBucket;
+      await this.client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
     } catch (error) {
       logger.warn('S3 delete failed', { key, error: error.message });
     }
@@ -40,7 +47,8 @@ class S3Service {
 
   async objectExists(key) {
     try {
-      await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+      const bucket = key.startsWith('profiles/') ? this.profileBucket : this.reportBucket;
+      await this.client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
       return true;
     } catch {
       return false;

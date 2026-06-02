@@ -5,7 +5,7 @@ const userRepository = require('../repositories/user.repository');
 const { createReportEntity } = require('../models/report.model');
 const { createNotificationEntity } = require('../models/notification.model');
 const { createActivityLogEntity } = require('../models/activityLog.model');
-const { generateReportId, generateNotificationId, generateActivityId } = require('../helpers/idHelper');
+const { generateReportId, generateNotificationId, generateActivityId, normalizeCityCode } = require('../helpers/idHelper');
 const { nowISO } = require('../helpers/dateHelper');
 const { NotFoundError, ForbiddenError } = require('../errors/AppError');
 const { REPORT_STATUS } = require('../constants/reportStatus');
@@ -15,12 +15,44 @@ const { parsePagination, paginateArray } = require('../utils/pagination');
 const { filterByRadius } = require('../utils/geo');
 const snsService = require('../aws/sns.service');
 const notificationService = require('./notification.service');
+const locationService = require('../aws/location.service');
+
+const CITY_CODE_MAP = [
+  { match: ['SANTA CRUZ', 'SANTACRUZ'], code: 'SCZ' },
+  { match: ['LA PAZ', 'LAPAZ'], code: 'LP' },
+  { match: ['COCHABAMBA'], code: 'CBBA' },
+  { match: ['SUCRE'], code: 'SCR' },
+  { match: ['TARIJA'], code: 'TJA' },
+  { match: ['ORURO'], code: 'ORU' },
+  { match: ['POTOSI', 'POTOSI'], code: 'PTS' },
+  { match: ['TRINIDAD'], code: 'TRN' },
+  { match: ['BENI'], code: 'BEN' },
+  { match: ['PANDO'], code: 'PND' },
+];
+
+const resolveCityCode = async (latitude, longitude) => {
+  const place = await locationService.reverseGeocode(latitude, longitude);
+  const cityText = [place?.city, place?.municipality, place?.region, place?.label]
+    .filter(Boolean)
+    .join(' ')
+    .toUpperCase();
+
+  for (const candidate of CITY_CODE_MAP) {
+    if (candidate.match.some((needle) => cityText.includes(needle))) {
+      return candidate.code;
+    }
+  }
+
+  return normalizeCityCode(place?.city || place?.municipality || place?.region || 'UNK');
+};
 
 class ReportService {
   async createReport(userId, data) {
-    const reportId = generateReportId();
     const timestamp = nowISO();
     const priority = data.priority || CATEGORY_DEFAULT_PRIORITY[data.category] || REPORT_PRIORITY.MEDIUM;
+    const cityCode = await resolveCityCode(data.latitude, data.longitude);
+    const sequence = (await reportRepository.countByCityCode(cityCode)) + 1;
+    const reportId = generateReportId(cityCode, sequence);
 
     // Verificar TrustScore del usuario para decidir si publicar
     const user = await userRepository.findById(userId);
@@ -31,6 +63,8 @@ class ReportService {
 
     const report = createReportEntity({
       reportId,
+      sequence,
+      cityCode,
       userId,
       title: data.title,
       category: data.category,
@@ -79,7 +113,8 @@ class ReportService {
 
     const pagination = parsePagination(query);
     const items = await reportRepository.findWithFilters(filters);
-    return paginateArray(items, pagination);
+    const enriched = await this._attachReporterInfo(items, currentUser);
+    return paginateArray(enriched, pagination);
   }
 
   async getReportById(reportId, currentUser) {
@@ -90,7 +125,7 @@ class ReportService {
       throw new ForbiddenError('You do not have access to this report');
     }
 
-    return report;
+    return this._attachReporterInfo([report], currentUser).then(([item]) => item);
   }
 
   async getPublicReportById(reportId) {
@@ -109,9 +144,40 @@ class ReportService {
 
     return {
       ...report,
+      imageUrls: (report.imageKeys && report.imageKeys.length > 0) 
+        ? report.imageKeys.map(k => `https://${require('../config/aws').awsInfrastructure.s3.bucketName}.s3.${require('../config/aws').awsInfrastructure.region}.amazonaws.com/${k}`) 
+        : (report.imageUrl ? [report.imageUrl] : []),
       reporterName,
       reporterTrustScore,
     };
+  }
+
+  async _attachReporterInfo(reports, currentUser) {
+    const shouldEnrich = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.CITIZEN;
+    if (!shouldEnrich || !Array.isArray(reports) || reports.length === 0) return reports;
+
+    const cache = new Map();
+    return Promise.all(
+      reports.map(async (report) => {
+        if (!report?.userId) return report;
+        if (!cache.has(report.userId)) {
+          cache.set(
+            report.userId,
+            userRepository.findById(report.userId).catch(() => null),
+          );
+        }
+        const user = await cache.get(report.userId);
+        return {
+          ...report,
+          imageUrls: (report.imageKeys && report.imageKeys.length > 0) 
+            ? report.imageKeys.map(k => `https://${require('../config/aws').awsInfrastructure.s3.bucketName}.s3.${require('../config/aws').awsInfrastructure.region}.amazonaws.com/${k}`) 
+            : (report.imageUrl ? [report.imageUrl] : []),
+          reporterName: user?.name || 'Ciudadano',
+          reporterTrustScore: user?.trustScore ?? 50,
+          reporterEmail: user?.email || null,
+        };
+      }),
+    );
   }
 
   async updateStatus(reportId, status, currentUser, notes) {

@@ -34,6 +34,8 @@ const logoutSchema = Joi.object({
 const updateProfileSchema = Joi.object({
   name: Joi.string().min(2).max(100).required(),
   phone: Joi.string().max(20).optional().allow(null, ''),
+  avatarKey: Joi.string().max(500).optional().allow(null, ''),
+  avatarUrl: Joi.string().uri().max(1000).optional().allow(null, ''),
 });
 
 const updatePasswordSchema = Joi.object({

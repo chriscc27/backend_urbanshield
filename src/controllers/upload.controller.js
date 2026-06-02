@@ -10,6 +10,11 @@ const getPresignedUrl = asyncHandler(async (req, res) => {
   sendSuccess(res, { message: 'Presigned URL generated', data: result });
 });
 
+const uploadDirect = asyncHandler(async (req, res) => {
+  const result = await uploadService.uploadDirect(req.file, req.user.userId, req.body.purpose);
+  sendSuccess(res, { message: 'File uploaded successfully', data: result });
+});
+
 const getUploadMetadata = asyncHandler(async (req, res) => {
   const result = await uploadService.getUploadMetadata(req.params.key);
   sendSuccess(res, { message: 'Upload metadata retrieved', data: result });
@@ -17,5 +22,6 @@ const getUploadMetadata = asyncHandler(async (req, res) => {
 
 module.exports = {
   getPresignedUrl,
+  uploadDirect,
   getUploadMetadata,
 };
