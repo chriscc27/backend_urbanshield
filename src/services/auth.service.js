@@ -64,6 +64,22 @@ class AuthService {
   }
 
   async login({ email, password }) {
+    if (awsInfrastructure.cognito.useCognito) {
+      const authResult = await cognitoService.signIn({ email, password });
+      const user = await userRepository.findByEmail(email);
+      if (!user || !user.isActive) throw new UnauthorizedError('User not found or inactive');
+      
+      const tokens = {
+        accessToken: authResult.IdToken, // Using IdToken so frontend sends it, allowing us to read the email claim
+        refreshToken: authResult.RefreshToken,
+        idToken: authResult.IdToken,
+        tokenType: 'Bearer',
+        expiresIn: authResult.ExpiresIn,
+      };
+      await this._storeRefreshToken(user.userId, tokens.refreshToken);
+      return { user: toPublicUser(user), tokens };
+    }
+
     const user = await userRepository.findByEmail(email);
     if (!user || !user.isActive) {
       throw new UnauthorizedError('Invalid credentials');
@@ -81,6 +97,38 @@ class AuthService {
   }
 
   async refreshToken(refreshToken) {
+    if (awsInfrastructure.cognito.useCognito) {
+      try {
+        const { AdminInitiateAuthCommand } = require('@aws-sdk/client-cognito-identity-provider');
+        const result = await cognitoService.client.send(
+          new AdminInitiateAuthCommand({
+            UserPoolId: cognitoService.userPoolId,
+            ClientId: cognitoService.clientId,
+            AuthFlow: 'REFRESH_TOKEN_AUTH',
+            AuthParameters: { REFRESH_TOKEN: refreshToken },
+          })
+        );
+        
+        const newTokens = {
+          accessToken: result.AuthenticationResult.IdToken,
+          idToken: result.AuthenticationResult.IdToken,
+          refreshToken: refreshToken,
+          tokenType: 'Bearer',
+          expiresIn: result.AuthenticationResult.ExpiresIn,
+        };
+
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.decode(result.AuthenticationResult.IdToken);
+        const user = await userRepository.findByEmail(decoded.email);
+        
+        if (!user || !user.isActive) throw new UnauthorizedError('User not found or inactive');
+        await this._storeRefreshToken(user.userId, refreshToken);
+        return { user: toPublicUser(user), tokens: newTokens };
+      } catch (error) {
+        throw new UnauthorizedError('Invalid refresh token');
+      }
+    }
+
     const decoded = verifyRefreshToken(refreshToken);
     const stored = await this._getRefreshToken(decoded.userId);
     if (!stored || stored !== refreshToken) {
@@ -110,12 +158,8 @@ class AuthService {
     }
 
     if (awsInfrastructure.cognito.useCognito) {
-      try {
-        await cognitoService.forgotPassword(email);
-        return { message: 'Password reset initiated via Cognito' };
-      } catch (err) {
-        console.warn('Cognito forgot password failed, falling back to local reset:', err.message);
-      }
+      await cognitoService.forgotPassword(email);
+      return { message: 'Password reset code sent via email' };
     }
 
     const resetToken = signPasswordResetToken({ userId: user.userId, email: user.email });
@@ -132,7 +176,19 @@ class AuthService {
     };
   }
 
-  async resetPassword({ token, newPassword }) {
+  async resetPassword({ token, newPassword, email }) {
+    if (awsInfrastructure.cognito.useCognito) {
+      if (!email) throw new BadRequestError('Email is required for Cognito reset');
+      await cognitoService.confirmForgotPassword({ email, code: token, newPassword });
+      
+      const user = await userRepository.findByEmail(email);
+      if (user) {
+        const hashedPassword = await hashPassword(newPassword);
+        await userRepository.update(user.userId, { password: hashedPassword });
+      }
+      return { message: 'Password reset successfully' };
+    }
+
     const decoded = verifyPasswordResetToken(token);
     const stored = await this._getPasswordResetToken(decoded.userId);
     if (!stored || stored !== token) {
