@@ -100,6 +100,10 @@ class ReportService {
         reportId,
         category: report.category,
         priority: report.priority,
+        title: report.title,
+        description: report.description,
+        location: report.location,
+        exactZone: report.exactZone,
         latitude: report.latitude,
         longitude: report.longitude,
       });
@@ -145,11 +149,13 @@ class ReportService {
     
     let reporterName = 'Ciudadano';
     let reporterTrustScore = 50;
+    let reporterAvatarUrl = null;
     try {
       const user = await userRepository.findById(report.userId);
       if (user) {
         reporterName = user.name;
         reporterTrustScore = user.trustScore ?? 50;
+        reporterAvatarUrl = user.avatarUrl || null;
       }
     } catch (err) {}
 
@@ -160,6 +166,7 @@ class ReportService {
         : (report.imageUrl ? [report.imageUrl] : []),
       reporterName,
       reporterTrustScore,
+      reporterAvatarUrl,
     };
   }
 
@@ -186,6 +193,7 @@ class ReportService {
           reporterName: user?.name || 'Ciudadano',
           reporterTrustScore: user?.trustScore ?? 50,
           reporterEmail: user?.email || null,
+          reporterAvatarUrl: user?.avatarUrl || null,
         };
       }),
     );
