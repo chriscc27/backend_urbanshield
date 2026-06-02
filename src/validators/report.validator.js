@@ -23,7 +23,7 @@ const updateStatusSchema = Joi.object({
 
 const listReportsQuerySchema = Joi.object({
   page: Joi.number().integer().min(1).optional(),
-  limit: Joi.number().integer().min(1).max(100).optional(),
+  limit: Joi.number().integer().min(1).max(1000).optional(),
   status: Joi.string().valid(...REPORT_STATUS_LIST).optional(),
   category: Joi.string().valid(...REPORT_CATEGORY_LIST).optional(),
   priority: Joi.string().valid(...Object.values(REPORT_PRIORITY)).optional(),

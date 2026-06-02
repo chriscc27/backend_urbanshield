@@ -16,6 +16,31 @@ class AdminService {
 
     const users = await userRepository.findAll();
 
+    const resolvedReports = allReports.filter(r => r.resolvedAt && r.createdAt);
+    let avgResponseTime = '—';
+    if (resolvedReports.length > 0) {
+      const totalMins = resolvedReports.reduce((acc, r) => {
+        const diff = new Date(r.resolvedAt) - new Date(r.createdAt);
+        return acc + Math.max(0, diff / 60000);
+      }, 0);
+      const avg = Math.round(totalMins / resolvedReports.length);
+      
+      // format as hours/mins if > 60
+      if (avg >= 60) {
+        const h = Math.floor(avg / 60);
+        const m = avg % 60;
+        avgResponseTime = `${h}h ${m}m`;
+      } else {
+        avgResponseTime = `${avg}m`;
+      }
+    }
+
+    const criticalZonesSet = new Set(
+      allReports
+        .filter(r => r.priority === REPORT_PRIORITY.CRITICAL && r.status !== REPORT_STATUS.RESOLVED && r.cityCode)
+        .map(r => r.cityCode)
+    );
+
     return {
       stats: {
         activeIncidents: analytics.active,
@@ -23,10 +48,8 @@ class AdminService {
         totalReports: analytics.total,
         criticalOpen: analytics.criticalCount,
         totalUsers: users.length,
-        avgResponseTime: '14min',
-        deployedUnits: 34,
-        totalUnits: 50,
-        criticalZones: 3,
+        avgResponseTime,
+        criticalZones: criticalZonesSet.size,
       },
       analytics,
       criticalReports,
