@@ -15,6 +15,7 @@ const { ConflictError, UnauthorizedError, NotFoundError, BadRequestError } = req
 const { env } = require('../config/env');
 const { awsInfrastructure } = require('../config/aws');
 const cognitoService = require('../aws/cognito.service');
+const emailService = require('./email.service');
 const activityLogRepository = require('../repositories/activityLog.repository');
 const { createActivityLogEntity } = require('../models/activityLog.model');
 const { generateActivityId } = require('../helpers/idHelper');
@@ -103,14 +104,22 @@ class AuthService {
     }
 
     if (awsInfrastructure.cognito.useCognito) {
-      await cognitoService.forgotPassword(email);
-      return { message: 'Password reset initiated via Cognito' };
+      try {
+        await cognitoService.forgotPassword(email);
+        return { message: 'Password reset initiated via Cognito' };
+      } catch (err) {
+        console.warn('Cognito forgot password failed, falling back to local reset:', err.message);
+      }
     }
 
     const resetToken = signPasswordResetToken({ userId: user.userId, email: user.email });
     await this._storePasswordResetToken(user.userId, resetToken);
 
     const resetUrl = `${env.passwordReset.frontendUrl}/reset-password?token=${resetToken}`;
+    
+    // Send email using Nodemailer
+    await emailService.sendPasswordResetEmail(user.email, resetUrl);
+
     return {
       message: 'If the email exists, a reset link will be sent',
       ...(env.isDevelopment && { resetUrl, resetToken }),
@@ -147,6 +156,8 @@ class AuthService {
     await userRepository.update(userId, {
       name: data.name,
       phone: data.phone,
+      avatarKey: data.avatarKey ?? user.avatarKey ?? null,
+      avatarUrl: data.avatarUrl ?? user.avatarUrl ?? null,
     });
     
     return this.getProfile(userId);

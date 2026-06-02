@@ -35,11 +35,14 @@ const env = {
     reportsTable: process.env.DYNAMODB_TABLE_REPORTS || 'UrbanShield-Reports',
     notificationsTable: process.env.DYNAMODB_TABLE_NOTIFICATIONS || 'UrbanShield-Notifications',
     activityLogsTable: process.env.DYNAMODB_TABLE_ACTIVITY_LOGS || 'UrbanShield-ActivityLogs',
+    supportMessagesTable: process.env.DYNAMODB_TABLE_SUPPORT_MESSAGES || 'UrbanShield-SupportMessages',
   },
   s3: {
     bucketName: process.env.S3_BUCKET_NAME || 'urbanshield-uploads',
+    profileBucketName: process.env.S3_PROFILE_BUCKET_NAME || 'urbanshield-profile-photos',
     presignedUrlExpiresIn: parseInt(process.env.S3_PRESIGNED_URL_EXPIRES_IN, 10) || 3600,
     maxSizeMb: parseInt(process.env.S3_UPLOAD_MAX_SIZE_MB, 10) || 5,
+    profileMaxSizeMb: parseInt(process.env.S3_PROFILE_UPLOAD_MAX_SIZE_MB, 10) || 2,
   },
   cognito: {
     userPoolId: process.env.COGNITO_USER_POOL_ID,
@@ -58,6 +61,10 @@ const env = {
   passwordReset: {
     tokenExpiresIn: process.env.PASSWORD_RESET_TOKEN_EXPIRES_IN || '1h',
     frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+  },
+  email: {
+    user: process.env.EMAIL_USER || 'gestiontallerdegradoucb@gmail.com',
+    pass: process.env.EMAIL_PASS || 'prhb cfzz ejst dzvr',
   },
 };
 

@@ -1,4 +1,8 @@
-const { SearchPlaceIndexForTextCommand, GetMapTileCommand } = require('@aws-sdk/client-location');
+const {
+  SearchPlaceIndexForTextCommand,
+  SearchPlaceIndexForPositionCommand,
+  GetMapTileCommand,
+} = require('@aws-sdk/client-location');
 const { getLocationClient } = require('./clients');
 const { awsInfrastructure } = require('../config/aws');
 const logger = require('../utils/logger');
@@ -31,10 +35,42 @@ class LocationService {
         label: item.Place?.Label,
         latitude: item.Place?.Geometry?.Point?.[1],
         longitude: item.Place?.Geometry?.Point?.[0],
+        city: item.Place?.Municipality || item.Place?.City || item.Place?.Region,
       }));
     } catch (error) {
       logger.error('Location search failed', { error: error.message });
       return [];
+    }
+  }
+
+  async reverseGeocode(latitude, longitude) {
+    if (!this.placeIndex) {
+      logger.debug('Location place index not configured');
+      return null;
+    }
+
+    try {
+      const result = await this.client.send(
+        new SearchPlaceIndexForPositionCommand({
+          IndexName: this.placeIndex,
+          Position: [Number(longitude), Number(latitude)],
+          MaxResults: 1,
+        }),
+      );
+
+      const place = result.Results?.[0]?.Place || null;
+      if (!place) return null;
+
+      return {
+        label: place.Label || null,
+        country: place.Country || null,
+        region: place.Region || null,
+        municipality: place.Municipality || null,
+        city: place.Municipality || place.City || place.Region || null,
+      };
+    } catch (error) {
+      logger.warn('Location reverse geocode failed', { error: error.message });
+      return null;
     }
   }
 

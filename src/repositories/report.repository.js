@@ -26,6 +26,11 @@ class ReportRepository extends BaseRepository {
     return all.filter((r) => r.userId === userId).sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
   }
 
+  async countByCityCode(cityCode) {
+    const all = await this.findAll();
+    return all.filter((report) => report.cityCode === cityCode).length;
+  }
+
   async findWithFilters(filters = {}) {
     let items = await this.findAll();
 
@@ -41,6 +46,7 @@ class ReportRepository extends BaseRepository {
           r.title?.toLowerCase().includes(term) ||
           r.description?.toLowerCase().includes(term) ||
           r.location?.toLowerCase().includes(term) ||
+          r.cityCode?.toLowerCase().includes(term) ||
           r.reportId?.toLowerCase().includes(term),
       );
     }

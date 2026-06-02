@@ -5,6 +5,7 @@ const tableNames = {
   reports: env.dynamodb.reportsTable,
   notifications: env.dynamodb.notificationsTable,
   activityLogs: env.dynamodb.activityLogsTable,
+  supportMessages: env.dynamodb.supportMessagesTable,
 };
 
 const tableSchemas = {
@@ -98,6 +99,34 @@ const tableSchemas = {
       },
     ],
   },
+  supportMessages: {
+    TableName: tableNames.supportMessages,
+    KeySchema: [{ AttributeName: 'supportMessageId', KeyType: 'HASH' }],
+    AttributeDefinitions: [
+      { AttributeName: 'supportMessageId', AttributeType: 'S' },
+      { AttributeName: 'userId', AttributeType: 'S' },
+      { AttributeName: 'status', AttributeType: 'S' },
+      { AttributeName: 'createdAt', AttributeType: 'S' },
+    ],
+    GlobalSecondaryIndexes: [
+      {
+        IndexName: 'GSI_StatusCreatedAt',
+        KeySchema: [
+          { AttributeName: 'status', KeyType: 'HASH' },
+          { AttributeName: 'createdAt', KeyType: 'RANGE' },
+        ],
+        Projection: { ProjectionType: 'ALL' },
+      },
+      {
+        IndexName: 'GSI_UserIdCreatedAt',
+        KeySchema: [
+          { AttributeName: 'userId', KeyType: 'HASH' },
+          { AttributeName: 'createdAt', KeyType: 'RANGE' },
+        ],
+        Projection: { ProjectionType: 'ALL' },
+      },
+    ],
+  },
 };
 
 const globalSecondaryIndexes = {
@@ -140,8 +169,10 @@ const awsInfrastructure = {
   },
   s3: {
     bucketName: env.s3.bucketName,
+    profileBucketName: env.s3.profileBucketName,
     presignedUrlExpiresIn: env.s3.presignedUrlExpiresIn,
     maxSizeMb: env.s3.maxSizeMb,
+    profileMaxSizeMb: env.s3.profileMaxSizeMb,
   },
   cognito: {
     userPoolId: env.cognito.userPoolId,

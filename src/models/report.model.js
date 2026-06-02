@@ -1,5 +1,7 @@
 const createReportEntity = ({
   reportId,
+  sequence,
+  cityCode,
   userId,
   title,
   category,
@@ -18,6 +20,8 @@ const createReportEntity = ({
   downvotes = [],
 }) => ({
   reportId,
+  sequence,
+  cityCode,
   userId,
   title,
   category,
