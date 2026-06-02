@@ -107,6 +107,7 @@ provider:
         - Effect: Allow
           Action:
             - geo:SearchPlaceIndexForText
+            - geo:SearchPlaceIndexForPosition
             - geo:GetMapTile
           Resource: "*"
 
@@ -125,6 +126,7 @@ provider:
             - cognito-idp:ListUsers
             - cognito-idp:SignUp
             - cognito-idp:ConfirmSignUp
+            - cognito-idp:AdminConfirmSignUp
           Resource: "*"
 
 custom:
