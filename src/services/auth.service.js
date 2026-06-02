@@ -53,6 +53,12 @@ class AuthService {
     await userRepository.create(user);
     await this._logActivity('user', userId, 'USER_REGISTERED', userId);
 
+    // Automatically subscribe new user to SNS Emergency Alerts Topic
+    const snsService = require('../aws/sns.service');
+    if (awsInfrastructure.sns.emergencyAlertsTopic) {
+      await snsService.subscribeEmail(awsInfrastructure.sns.emergencyAlertsTopic, email);
+    }
+
     const tokens = this._generateTokens(user);
     return { user: toPublicUser(user), tokens };
   }
