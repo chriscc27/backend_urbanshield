@@ -34,6 +34,7 @@ class LocationService {
       status: r.status,
       priority: r.priority,
       title: r.title,
+      description: r.description || '',
       createdAt: r.createdAt,
       upvotesCount: Array.isArray(r.upvotes) ? r.upvotes.length : 0,
       downvotesCount: Array.isArray(r.downvotes) ? r.downvotes.length : 0,
