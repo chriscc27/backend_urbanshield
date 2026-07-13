@@ -1,6 +1,6 @@
 # 🛡️ UrbanShield - Backend API
 
-![UrbanShield Backend](https://via.placeholder.com/1200x300?text=UrbanShield+API+Serverless)
+![UrbanShield Backend](https://placehold.co/1200x300/0f172a/ffffff?text=UrbanShield+API+Serverless)
 
 > **UrbanShield** is a citizen platform designed for reporting urban incidents and emergencies. 
 > This repository contains the **Backend API**, designed to be scalable, secure, and Serverless, built on Node.js and the AWS ecosystem.
