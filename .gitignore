@@ -16,3 +16,6 @@ uploads/temp/*
 purgeAndAdmin.js
 seedData.js
 seedElAlto.js
+
+# Serverless directories
+.serverless/

@@ -7,8 +7,8 @@ const env = {
   port: parseInt(process.env.PORT, 10) || 3000,
   apiPrefix: process.env.API_PREFIX || '/api',
   appName: process.env.APP_NAME || 'UrbanShield API',
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
-  corsOrigins: (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  corsOrigin: process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173',
+  corsOrigins: ((process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173'))
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean),
